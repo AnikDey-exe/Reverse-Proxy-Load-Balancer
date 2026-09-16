@@ -2,6 +2,7 @@ package healthcheck
 
 import (
 	"context"
+	"log"
 	"net/http"
 	"time"
 
@@ -27,6 +28,8 @@ func NewChecker(pool *balancer.Pool, interval, timeout time.Duration) *Checker {
 func (c *Checker) Run(ctx context.Context) {
 	c.probeAll(ctx)
 
+	// fixed interval for now, could switch to backoff if this ever needs
+	// to run against something flakier than a couple local processes
 	ticker := time.NewTicker(c.Interval)
 	defer ticker.Stop()
 
@@ -49,7 +52,19 @@ func (c *Checker) probeAll(ctx context.Context) {
 func (c *Checker) probe(ctx context.Context, b *balancer.Backend) {
 	reqCtx, cancel := context.WithTimeout(ctx, c.Timeout)
 	defer cancel()
-	b.SetAlive(isReachable(reqCtx, c.client, b.URL.String()))
+
+	alive := isReachable(reqCtx, c.client, b.URL.String())
+	wasAlive := b.IsAlive()
+	b.SetAlive(alive)
+
+	if alive == wasAlive {
+		return
+	}
+	if alive {
+		log.Printf("backend %s is back up", b.URL)
+	} else {
+		log.Printf("backend %s stopped responding, marking it down", b.URL)
+	}
 }
 
 func isReachable(ctx context.Context, client *http.Client, target string) bool {
@@ -62,5 +77,7 @@ func isReachable(ctx context.Context, client *http.Client, target string) bool {
 		return false
 	}
 	defer resp.Body.Close()
+	// any response at all means the process is up and answering, even
+	// if it's a 4xx/5xx 
 	return true
 }
