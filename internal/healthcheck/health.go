@@ -78,6 +78,6 @@ func isReachable(ctx context.Context, client *http.Client, target string) bool {
 	}
 	defer resp.Body.Close()
 	// any response at all means the process is up and answering, even
-	// if it's a 4xx/5xx 
+	// if it's a 4xx/5xx
 	return true
 }
